@@ -17,21 +17,21 @@ def main():
 
     # Mapping von Klassennamen zu Zahlen
     class_map = {
-        "epithel": 0,
-        "SNP": 1,
+        "Epithel": 0,
+        "Snp": 1,
         "Stroma": 2
     }
 
     # Fehlende Spalten prüfen
-    required_cols = ["prob_epithel", "prob_SNP", "prob_Stroma", "predicted_class"]
+    required_cols = ["prob_Epithel", "prob_Snp", "prob_Stroma", "predicted_class"]
     for col in required_cols:
         if col not in df.columns:
             raise ValueError(f"Spalte '{col}' fehlt in der Eingabedatei {args.input_csv}")
 
     # Neue DataFrame-Struktur
     new_df = pd.DataFrame({
-        "prob_epithel": df["prob_epithel"],
-        "prob_SNP": df["prob_SNP"],
+        "prob_Epithel": df["prob_Epithel"],
+        "prob_Snp": df["prob_Snp"],
         "prob_Stroma": df["prob_Stroma"],
         "predicted_class_num": df["predicted_class"].map(class_map)
     })
