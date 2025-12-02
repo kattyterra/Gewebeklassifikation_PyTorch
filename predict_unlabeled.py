@@ -10,10 +10,8 @@ from torch import nn
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--model_path", type=str, required=True, help="Pfad zum trainierten Modell (.pt)")
-    p.add_argument("--class_names", type=str, required=True, help="Pfad zu einer Textdatei mit Klassennamen (eine pro Zeile)")
     p.add_argument("--img_path", type=str, required=True, help="Pfad zu einem Bild oder Ordner mit Bildern")
     p.add_argument("--img_size", type=int, default=384, help="Bildgröße, wie im Training")
-    p.add_argument("--out_csv", type=str, default="predictions_unlabeled.csv", help="Pfad zur Ausgabedatei (CSV)")
     return p.parse_args()
 
 
@@ -40,12 +38,14 @@ def predict_image(model, img_path, transform, class_names, device):
 
 def main():
     args = parse_args()
+
+    out_csv = args.img_path + "/" + os.path.basename(args.img_path) + "_unformatted_results.csv"
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(" Device:", device)
 
-    # Klassen laden
-    with open(args.class_names, "r") as f:
-        class_names = [line.strip() for line in f if line.strip()]
+    # Klassennamen: wie im Training (WICHTIG: Neue Klassen hier hinzufügen!!!)
+    class_names = ["Epithel", "Snp", "Stroma", "xtra"]
 
     # Modell laden
     model = load_model(args.model_path, len(class_names), device)
@@ -61,7 +61,7 @@ def main():
     if os.path.isdir(args.img_path):
         for root, _, files in os.walk(args.img_path):
             for f in files:
-                if f.lower().endswith((".png", ".jpg", ".jpeg")):
+                if f.lower().endswith((".png", ".tif", ".tiff")):
                     image_files.append(os.path.join(root, f))
     else:
         image_files = [args.img_path]
@@ -87,10 +87,41 @@ def main():
 
     # CSV speichern
     df = pd.DataFrame(results)
-    os.makedirs(os.path.dirname(args.out_csv) or ".", exist_ok=True)
-    df.to_csv(args.out_csv, index=False)
+    os.makedirs(os.path.dirname(out_csv) or ".", exist_ok=True)
+    df.to_csv(out_csv, index=False)
 
-    print(f"\n Ergebnisse gespeichert in: {os.path.abspath(args.out_csv)}")
+    print(f"\n Ergebnisse gespeichert in: {os.path.abspath(out_csv)}")
+
+    # Eingabedatei lesen
+    df = pd.read_csv(out_csv)
+
+    # Mapping von Klassennamen zu Zahlen
+    class_map = {name: idx for idx, name in enumerate(class_names)}
+
+    # Fehlende Spalten prüfen
+    required_cols = ["prob_Epithel", "prob_Snp", "prob_Stroma", "prob_xtra", "predicted_class"]
+    for col in required_cols:
+        if col not in df.columns:
+            raise ValueError(f"Spalte '{col}' fehlt in der Eingabedatei {out_csv}")
+
+    # Neue DataFrame-Struktur
+    new_df = pd.DataFrame({
+        "prob_Epithel": df["prob_Epithel"].astype(float),
+        "prob_Snp": df["prob_Snp"].astype(float),
+        "prob_Stroma": df["prob_Stroma"].astype(float),
+        "prob_xtra": df["prob_xtra"].astype(float),
+        "predicted_class_num": df["predicted_class"].map(class_map)
+    })
+
+    formatted_path = args.img_path + "/" + os.path.basename(args.img_path) + "_results.csv"
+
+    # Ausgabeordner erstellen
+    os.makedirs(os.path.dirname(formatted_path) or ".", exist_ok=True)
+
+    # Neue CSV ohne Kopfzeile speichern
+    new_df.to_csv(formatted_path, index=False, sep=";", header=False)
+
+    print(f"Neue CSV gespeichert in: {os.path.abspath(formatted_path)}")
 
 
 if __name__ == "__main__":

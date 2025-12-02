@@ -1,0 +1,5 @@
+,Epithel,Snp,Stroma,xtra
+Epithel,250,0,0,0
+Snp,1,249,0,0
+Stroma,0,0,250,0
+xtra,0,1,0,249
