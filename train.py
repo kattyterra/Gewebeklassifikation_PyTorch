@@ -36,7 +36,7 @@ def count_images_by_class(root):
         if os.path.isdir(dpath):
             counts[cls] = len([
                 f for f in os.listdir(dpath)
-                if f.lower().endswith((".png"))
+                if f.lower().endswith((".png", ".tif"))
             ])
     print(counts)
     print("Total:", sum(counts.values()))
