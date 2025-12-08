@@ -94,15 +94,12 @@ def main():
 
     # Alle Bilddateien rekursiv sammeln
     image_files = []
-    if os.path.isdir(args.img_path):
-        # Ordner → über Unterordner iterieren (Unterordner = echte Klasse)
-        for root, _, files in os.walk(args.img_path):
-            for f in files:
-                if f.lower().endswith((".png", ".jpg", ".jpeg")):
-                    image_files.append(os.path.join(root, f))
-    else:
-        # Einzelnes Bild
-        image_files = [args.img_path]
+    
+    # Ordner → über Unterordner iterieren (Unterordner = echte Klasse)
+    for root, _, files in os.walk(args.img_path):
+        for f in files:
+            if f.lower().endswith((".png", ".jpg", ".jpeg")):
+                image_files.append(os.path.join(root, f))
 
     results = []
 
