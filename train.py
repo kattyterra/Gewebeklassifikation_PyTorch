@@ -289,7 +289,7 @@ def main():
         os.path.join(args.outdir, "confusion_matrix_normalized.csv")
     )
 
-    # Klassennamen separat speichern (für spätere Inferenz-Skripte)
+    # Klassennamen separat speichern
     with open(os.path.join(args.outdir, "class_names.txt"), "w", encoding="utf-8") as f:
         for name in class_names:
             f.write(name + "\n")
