@@ -2,6 +2,7 @@ import os
 import argparse
 import torch
 from torchvision import transforms, models
+from torchvision.models import EfficientNet_B3_Weights
 from PIL import Image
 import pandas as pd
 from torch import nn
@@ -10,10 +11,9 @@ from torch import nn
 def parse_args():
     """
     Liest die Kommandozeilenargumente ein.
-        -f : Pfad zu einer Bilddatei oder einem Ordner mit Bildern  
+        -f : Pfad zu einer Bilddatei oder einem Ordner mit Bildern
         -img_size : Bildgröße für das Modell (muss dem Training entsprechen)
     """
-
     p = argparse.ArgumentParser()
     p.add_argument("-f", type=str, required=True, help="Pfad zu einem Bild oder Ordner mit Bildern")
     p.add_argument("-img_size", type=int, default=384, help="Bildgröße, wie im Training")
@@ -22,23 +22,24 @@ def parse_args():
 
 def load_model(model_path, num_classes, device):
     """
-    Lädt ein EfficientNetV2-S Modell, passt die Klassifikationsschicht an
+    Lädt ein EfficientNet-B3 Modell, passt die Klassifikationsschicht an
     und lädt die gespeicherten Gewichte.
-        model_path : Pfad zur .pt-Modelldatei  
-        num_classes : Anzahl der Klassenausgänge  
+        model_path : Pfad zur .pt-Modelldatei
+        num_classes : Anzahl der Klassenausgänge
         device : CPU oder GPU
     """
+    # Kein Pretrained-Weight, da wir eigene Gewichte laden
+    model = models.efficientnet_b3(weights=None)
 
-    model = models.efficientnet_v2_s(weights=None)
-
-    # Klassifikator anpassen → Anzahl Klassen ändern
+    # Klassifikator anpassen → Anzahl Klassen ändern (wie im Training)
     model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
 
     # Modellparameter laden
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    state_dict = torch.load(model_path, map_location=device)
+    model.load_state_dict(state_dict)
 
-    model.eval()          # Inference-Modus
-    model.to(device)      # Modell auf das Zielgerät verschieben
+    model.eval()            # Inference-Modus
+    model.to(device)        # Modell auf das Zielgerät verschieben
     return model
 
 
@@ -46,11 +47,7 @@ def predict_image(model, img_path, transform, class_names, device):
     """
     Nimmt ein einzelnes Bild, wandelt es in ein Tensorformat um,
     führt eine Vorhersage durch und gibt die Klasse + Wahrscheinlichkeiten zurück.
-        img_path : Bildpfad  
-        transform : angewandte Bildtransformationen  
-        class_names : Liste der Klassennamen  
     """
-
     # Bild laden und RGB erzwingen
     img = Image.open(img_path).convert("RGB")
 
@@ -76,7 +73,7 @@ def main():
     # Gerät auswählen (GPU bevorzugt)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Klassennamen exakt wie im Training (WICHTIG: bei neuen Klassen anpassen!)
+    # Klassennamen exakt wie im Training
     class_names = ["Epithel", "Snp", "Stroma", "xtra"]
 
     # Modellpfad relativ zum Skript
@@ -86,10 +83,14 @@ def main():
     # Modell laden
     model = load_model(model_path, len(class_names), device)
 
-    # Transformationen wie im Training
+    # Gleiche Preprocessing-Transforms wie beim Training mit EfficientNet-B3
+    weights = EfficientNet_B3_Weights.IMAGENET1K_V1
+    base_transforms = weights.transforms()
+
+    # Für Inferenz: Resize + offizielle Normalisierung, aber keine Augmentation
     transform = transforms.Compose([
         transforms.Resize((args.img_size, args.img_size)),
-        transforms.ToTensor(),
+        base_transforms,  # enthält ToTensor + Normalize
     ])
 
     # Bilddateien auflisten
@@ -98,14 +99,15 @@ def main():
         # Falls ein Ordner angegeben wurde → rekursiv durchsuchen
         for root, _, files in os.walk(args.f):
             for f in files:
-                if f.lower().endswith((".png", ".tif", ".tiff")):
+                if f.lower().endswith((".png", ".tif", ".tiff", ".jpg", ".jpeg")):
                     image_files.append(os.path.join(root, f))
     else:
         # Einzelbild
         image_files = [args.f]
 
     if not image_files:
-        return  # Keine gültigen Dateien vorhanden
+        print("Keine gültigen Bilddateien gefunden.")
+        return
 
     results = []
 
@@ -116,12 +118,12 @@ def main():
         # Numerische Klassen-ID bestimmen
         class_idx = class_names.index(pred_class)
 
-        #CSV-Zeile erzeugen
+        # CSV-Zeile erzeugen
         row = {
-            "prob_Epithel": round(probs[class_names.index("Epithel")] * 100, 2),
-            "prob_Snp": round(probs[class_names.index("Snp")] * 100, 2),
-            "prob_Stroma": round(probs[class_names.index("Stroma")] * 100, 2),
-            "prob_xtra": round(probs[class_names.index("xtra")] * 100, 2),
+            "prob_Epithel": round(float(probs[class_names.index("Epithel")]), 2),
+            "prob_Snp":     round(float(probs[class_names.index("Snp")]), 2),
+            "prob_Stroma":  round(float(probs[class_names.index("Stroma")]), 2),
+            "prob_xtra":    round(float(probs[class_names.index("xtra")]), 2),
             "predicted_class_num": class_idx
         }
 
@@ -132,11 +134,12 @@ def main():
 
     # Ausgabepfad konstruieren
     parent_folder = os.path.abspath(os.path.join(args.f, ".."))
-    folder_name = os.path.basename(args.f)
+    folder_name = os.path.basename(args.f.rstrip(os.sep))
     formatted_path = os.path.join(parent_folder, folder_name + "_results.csv")
 
-    # CSV speichern (ohne Kopfzeile)
+    # CSV speichern (ohne Kopfzeile, wie in deinem Original)
     new_df.to_csv(formatted_path, index=False, sep=";", header=False)
+    print("Ergebnisse gespeichert unter:", formatted_path)
 
 
 if __name__ == "__main__":
